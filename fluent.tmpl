@@ -61,7 +61,7 @@
       s3_region {{ $.Env.S3_REGION }}
       s3_object_key_format %{path}%{time_slice}_${hostname}_%{index}.%{file_extension}
       path prod_vpc_log/all/${tag_parts[-1]}/
-      buffer_path /var/log/td-agent/buffer/s3_${tag_parts[-1]}
+      buffer_path /data/buffer/s3_${tag_parts[-1]}
       buffer_chunk_limit 4G
       time_slice_format %Y%m%d-%H
       time_slice_wait 10m
