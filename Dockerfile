@@ -17,6 +17,7 @@ COPY . /app/
 WORKDIR /app/
 
 ENV S3_REGION ap-northeast-1
+ENV DOCKER_HOST unix:///tmp/docker.sock
 
 EXPOSE 10224
 EXPOSE 24224

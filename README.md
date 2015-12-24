@@ -25,5 +25,5 @@ set ENV `AWS_ACCESS_KEY_ID=<access_key>`
 set ENV `AWS_SECRET_ACCESS_KEY=<secret_key>`
 
 ```
-sudo docker run -e "TO_HOST=logserver.example.com" -d bungoume/log-aggregator
+sudo docker run -e "TO_HOST=logserver.example.com" -v /var/run/docker.sock:/tmp/docker.sock -d bungoume/log-aggregator
 ```
