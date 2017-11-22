@@ -27,7 +27,6 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
 
 RUN mkdir -p /etc/fluent/plugin && mkdir -p /data/buffer
 COPY plugin /etc/fluent/plugin/
-COPY files /data/
 
 COPY fluent.tmpl /etc/fluent/fluent.tmpl
 
