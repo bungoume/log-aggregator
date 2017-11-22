@@ -1,4 +1,14 @@
 # ------------------
+# System config
+# ------------------
+
+<system>
+  # workers 2
+  root_dir /data/buffer
+</system>
+
+
+# ------------------
 # from fluentd
 # ------------------
 
@@ -14,9 +24,17 @@
   bind 0.0.0.0
 </source>
 
+<source>
+  @type forward
+  port 10228
+  bind 0.0.0.0
+  <transport tls>
+    insecure true
+  </transport>
+</source>
 
 # ------------------
-# for access_log
+# access_log
 # ------------------
 
 <filter access.nginx>
@@ -25,12 +43,7 @@
 
 <filter access.nginx>
   @type x_forwarded_for
-  replace_key client_ip
-</filter>
-
-<filter access.uwsgi>
-  @type x_forwarded_for
-  replace_key client_ip
+  mode outer_ip
 </filter>
 
 <filter access.**>
@@ -40,46 +53,130 @@
 
 <filter access.**>
   @type geoip
-  lookup_key client_ip
+  key_name client_ip
   flatten
 </filter>
 
-
-# ------------------
-# Forward
-# ------------------
-
-
 <match access.**>
-  @type forest
-  subtype copy
-  <template>
-    # deep_copy true
-    <store>
-      type s3
-      s3_bucket {{ $.Env.S3_BUCKET_NAME }}
-      s3_region {{ $.Env.S3_REGION }}
-      s3_object_key_format %{path}%{time_slice}_${hostname}_%{index}.%{file_extension}
-      path prod_vpc_log/all/${tag_parts[-1]}/
-      buffer_path /data/buffer/s3_${tag_parts[-1]}
-      buffer_chunk_limit 4G
-      time_slice_format %Y%m%d-%H
-      time_slice_wait 10m
-      store_as gzip_command
-      utc
-    </store>
-    {{if $.Env.ES_HOST}}
-    <store>
-      @type elasticsearch
-      hosts {{ $.Env.ES_HOST }}
-      port 9200
-      include_tag_key true
-      tag_key @log_name
-      logstash_format true
-      logstash_prefix access_${tag_parts[-1]}
-      buffer_chunk_limit 64m
-      flush_interval 1s
-    </store>
-    {{end}}
-  </template>
+  @type rewrite_tag_filter
+  <rule>
+    key app_name
+    pattern ^(.+)$
+    tag store.${tag}.$1
+  </rule>
 </match>
+
+<match store.access.**>
+  @type copy
+  <store>
+    @type elasticsearch
+    hosts {{ .Env.ES_HOST }}
+    port 9200
+    reload_connections false
+    include_tag_key true
+    tag_key @log_name
+    logstash_format true
+    logstash_prefix access_app
+    <buffer>
+      @type memory
+      flush_mode interval
+      flush_interval 1s
+    </buffer>
+  </store>
+  {{end}}
+</match>
+
+
+# ------------------
+# alert_log
+# ------------------
+
+<match alert.**>
+  @type rewrite_tag_filter
+  <rule>
+    key app_name
+    pattern ^(.+)$
+    tag store.${tag}.$1
+  </rule>
+</match>
+
+<match store.alert.**>
+  @type copy
+  # deep_copy true
+  {{if .Env.ES_HOST}}
+  <store>
+    @type elasticsearch_dynamic
+    hosts {{ .Env.ES_HOST }}
+    port 9200
+    reload_connections false
+    include_tag_key true
+    tag_key @log_name
+    logstash_format true
+    logstash_prefix alert_${tag_parts[-2]}
+    logstash_dateformat %Y.%m
+    <buffer>
+      @type memory
+      flush_mode interval
+      flush_interval 1s
+    </buffer>
+  </store>
+  {{end}}
+</match>
+
+
+# ------------------
+# fluent_log
+# (app_name use underscore)
+# ------------------
+
+{{if .Env.ES_HOST}}
+<match fluent.**>
+  @type elasticsearch
+  hosts {{ .Env.ES_HOST }}
+  port 9200
+  reload_connections false
+  include_tag_key true
+  tag_key @log_name
+  logstash_format true
+  logstash_prefix alert_fluent
+  logstash_dateformat %Y.%m
+  <buffer>
+    @type memory
+    flush_mode interval
+    flush_interval 1s
+  </buffer>
+</match>
+{{end}}
+
+
+# ------------------
+# audit_log
+# osquery, go_audit
+# ------------------
+
+{{if .Env.ES_HOST}}
+<match audit.**>
+  @type elasticsearch_dynamic
+  hosts {{ .Env.ES_HOST }}
+  port 9200
+  reload_connections false
+  logstash_format true
+  logstash_prefix audit_${tag_parts[-1]}
+  <buffer>
+    @type memory
+    flush_mode interval
+    flush_interval 1s
+  </buffer>
+</match>
+{{end}}
+
+
+# ------------------
+# for_debug
+# ------------------
+
+{{if .Env.STDOUT}}
+<filter store.**>
+  @type stdout
+</filter>
+{{end}}
